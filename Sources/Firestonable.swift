@@ -1,51 +1,40 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
+//
+//  File.swift
+//  
+//
+//  Created by Antonio Martelli on 09/03/24.
+//
 
+import OSLog
 import FirebaseFirestore
 import FirebaseStorage
 import PINCache
-import AppKit
 
+//private struct FBTypeCheck {
+//	enum TypeError: Error {
+//		case invalidFirestoreType
+//	}
+//	
+//	static func isSupportedType(_ value: Any) ->  Bool {
+//		// Verifica se il valore è di uno dei tipi di dati supportati da Firestore
+//		return value is String ||
+//		value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64 ||
+//		value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 ||
+//		value is Float || value is Double ||
+//		value is Bool ||
+//		value is Date ||
+//		value is [Any] ||
+//		value is [String: Any] ||
+//		value is GeoPoint ||
+//		value is DocumentReference ||
+//		value is NSNull
+//	}
+//}
 
-private struct FBTypeCheck {
-	enum TypeError: Error {
-		case invalidFirestoreType
-	}
-	
-	static func isSupportedType(_ value: Any) ->  Bool {
-		// Verifica se il valore è di uno dei tipi di dati supportati da Firestore
-		return value is String ||
-		value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64 ||
-		value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 ||
-		value is Float || value is Double ||
-		value is Bool ||
-		value is Date ||
-		value is [Any] ||
-		value is [String: Any] ||
-		value is GeoPoint ||
-		value is DocumentReference ||
-		value is NSNull
-	}
-}
-
-extension Array where Element: QueryDocumentSnapshot  {
-	func decode<T: Decodable>(as type: T.Type) -> [T]? {
-		do {
-			var items: [T] = []
-			for document in self {
-				let jsonData = try JSONSerialization.data(withJSONObject: document.data(), options: [])
-				let item = try JSONDecoder().decode(T.self, from: jsonData)
-				items.append(item)
-			}
-			return items
-		} catch {
-//			DZError("Error decoding object", error: error)
-			return nil
-		}
-	}
-}
 
 public protocol Firestonable: Codable, Identifiable, Hashable, CustomStringConvertible {
+
+	private let logger = Logger(subsystem: "Package", category: "Firestonable")
 	
 	init()
 	var id: String { get }
@@ -54,15 +43,12 @@ public protocol Firestonable: Codable, Identifiable, Hashable, CustomStringConve
 	var isPublic: Bool { get set }
 	
 	
-	// MARK: - Firebase func -
+	// MARK: - func
 	func create() async throws
 	func delete() async throws
 	static func getAll() async throws -> [Self]?
 	
 	
-	// MARK: Customize result for updater
-	
-	///
 	/**
 	 - Parsare enumeratori e restituire valori compatibili con firebase
 	 es:
@@ -78,10 +64,10 @@ public protocol Firestonable: Codable, Identifiable, Hashable, CustomStringConve
 	func getDifferences(with other: Self) -> [String: Any]
 }
 
-public extension Firestonable {
+extension Firestonable {
 	
 	var description: String {
-		String(describing: self)
+		describe(self)
 	}
 	
 	mutating func updatedAtDateToNow() {
@@ -138,9 +124,7 @@ public extension Firestonable {
 		try await Self.reference.document(id).delete()
 	}
 	
-	
 	// MARK: - Storage Metadata -
-	
 	func getFileMetadata(fromKey key: String) async throws -> StorageMetadata {
 		try await Storage
 			.storage()
@@ -176,7 +160,7 @@ public extension Firestonable {
 				urls.append(url)
 				
 			} catch {
-//				ErrorLogger.log("getStorageUrls error: \(error)", category: self)
+				logger.error("getStorageUrls error: \(error)")
 			}
 		}
 		return urls
@@ -214,15 +198,15 @@ public extension Firestonable {
 		}
 	}
 	
-//	func upload(media: Media, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
-//		try await Storage
-//			.storage()
-//			.reference()
-//			.child(baseChild(append: media.id))
-//			.putFileAsync(from: media.url, metadata: nil) { progress in
-//				onProgress?(progress)
-//			}
-//	}
+	func upload(media: Media, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
+		try await Storage
+			.storage()
+			.reference()
+			.child(baseChild(append: media.id))
+			.putFileAsync(from: media.url, metadata: nil) { progress in
+				onProgress?(progress)
+			}
+	}
 	
 	func upload(data: Data, id: String, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
 		try await Storage
@@ -308,7 +292,7 @@ public extension Firestonable {
 		guard !differenceCheck.isEmpty else { return }
 		other.updatedAt = Date().timeIntervalSince1970
 		let differences = getDifferences(with: other)
-//		InfoLogger.log("update(from: differences: \(differences.description)", category: self)
+		logger.info("differences: \(differences.description) update")
 		try await Self.reference.document(self.id).updateData(differences)
 	}
 }
@@ -321,49 +305,49 @@ enum MediaUpload: Error {
 }
 
 extension Firestonable {
-//	func uploadThumb(media: Media, longestLenghtOf lenght: CGFloat = 300, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
-//		do {
-//			let data = try Data(contentsOf: media.url)
-//			if let image = NSImage(data: data) {
-//				
-//				let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
-//				guard let jpgData = image.resize(to: thumbSize) else {
-//					throw MediaUpload.resizedError
-//				}
-//				
-//				do {
-//					return try await self.upload(data: jpgData.getJpgData(), id: media.thumbId) { progress in
-//						onProgress?(progress)
-//					}
-//				} catch {
-//					throw error
-//				}
-//			} else {
-//				throw MediaUpload.noImageFromDate
-//			}
-//		} catch {
-//			throw error
-//		}
-//	}
+	func uploadThumb(media: Media, longestLenghtOf lenght: CGFloat = 300, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
+		do {
+			let data = try Data(contentsOf: media.url)
+			if let image = NSImage(data: data) {
+
+				let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
+				guard let jpgData = image.resize(to: thumbSize) else {
+					throw MediaUpload.resizedError
+				}
+
+				do {
+					return try await self.upload(data: jpgData.getJpgData(), id: media.thumbId) { progress in
+						onProgress?(progress)
+					}
+				} catch {
+					throw error
+				}
+			} else {
+				throw MediaUpload.noImageFromDate
+			}
+		} catch {
+			throw error
+		}
+	}
 	
-//	func uploadThumb(image: NSImage, id: String, longestLenghtOf lenght: CGFloat = 300, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
-//		do {
-//			let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
-//			guard let jpgData = image.resize(to: thumbSize) else {
-//				throw MediaUpload.resizedError
-//			}
-//			
-//			do {
-//				return try await self.upload(data: jpgData.getJpgData(), id: id) { progress in
-//					onProgress?(progress)
-//				}
-//			} catch {
-//				throw error
-//			}
-//		} catch {
-//			throw error
-//		}
-//	}
+	func uploadThumb(image: NSImage, id: String, longestLenghtOf lenght: CGFloat = 300, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
+		do {
+			let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
+			guard let jpgData = image.resize(to: thumbSize) else {
+				throw MediaUpload.resizedError
+			}
+
+			do {
+				return try await self.upload(data: jpgData.getJpgData(), id: id) { progress in
+					onProgress?(progress)
+				}
+			} catch {
+				throw error
+			}
+		} catch {
+			throw error
+		}
+	}
 }
 
 
@@ -373,43 +357,40 @@ enum ThumbType {
 	case png, jpg
 }
 
-//extension Firestonable {
-//	
-//	func uploadThumb(media: Media, type: ThumbType, longestLenghtOf lenght: CGFloat = 640, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
-//		do {
-//			let data = try Data(contentsOf: media.url)
-//			if let image = NSImage(data: data) {
-//				let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
-//				let thumbnailImage = image.resize(to: thumbSize)!
-//				var data: Data
-//				
-//				switch type {
-//				case .jpg:
-//					data = thumbnailImage.getJpgData(compression: 0.8)
-//				case .png:
-//					data = thumbnailImage.getPNGData()
-//				}
-//				
-//				do {
-//					return try await self.upload(data: data, id: media.thumbId) { progress in
-//						onProgress?(progress)
-//					}
-//				} catch {
-//					throw error
-//				}
-//			} else {
-//				throw MediaUpload.noImageFromDate
-//			}
-//		} catch {
-//			throw error
-//		}
-//	}
-//}
-
-// MARK: - Utils -
-
 extension Firestonable {
-	
+	func uploadThumb(media: Media, type: ThumbType, longestLenghtOf lenght: CGFloat = 640, onProgress: ((Progress?) -> Void)? = nil) async throws -> StorageMetadata {
+		do {
+			let data = try Data(contentsOf: media.url)
+			if let image = NSImage(data: data) {
+				let thumbSize = image.getNewSize(withLongestLenghtOf: lenght)
+				let thumbnailImage = image.resize(to: thumbSize)!
+				var data: Data
+
+				switch type {
+				case .jpg:
+					data = thumbnailImage.getJpgData(compression: 0.8)
+				case .png:
+					data = thumbnailImage.getPNGData()
+				}
+
+				do {
+					return try await self.upload(data: data, id: media.thumbId) { progress in
+						onProgress?(progress)
+					}
+				} catch {
+					throw error
+				}
+			} else {
+				throw MediaUpload.noImageFromDate
+			}
+		} catch {
+			throw error
+		}
+	}
+}
+
+// MARK: - Utils
+extension Firestonable {
 	static func sort<T: Firestonable>(_ firestonables: [T], withIds ids: [String]) -> [T] {
 		// Create a dictionary to map IDs to indices in arrayB
 		let indexMap = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
@@ -427,6 +408,8 @@ extension Firestonable {
 	}
 }
 
+
+//MARK: -
 extension Firestonable {
 	func imageAt(_ url: URL) async throws -> NSImage {
 		let (data, _) = try await URLSession.shared.data(from: url)
@@ -436,39 +419,22 @@ extension Firestonable {
 		return image
 	}
 	
-//	func getImage(with key: String) async throws -> NSImage? {
-//		guard !key.isEmpty else {
-//			return nil
-//		}
-//		
-//		if let result = await PINCache.shared.object(forKeyAsync: key).2 {
-//			return NSImage(data: (result as? Data) ?? Data())
-//		}
-//		
-//		guard let url = try await getStorage(fromKey: key) else {
-//			return nil
-//		}
-//		
-//		let image = try await imageAt(url)
-//		let data = image.getPNGData()
-//		await PINCache.shared.setObjectAsync(data, forKey: key)
-//		return image
-//	}
+	func getImage(with key: String) async throws -> NSImage? {
+		guard !key.isEmpty else {
+			return nil
+		}
+
+		if let result = await PINCache.shared.object(forKeyAsync: key).2 {
+			return NSImage(data: (result as? Data) ?? Data())
+		}
+
+		guard let url = try await getStorage(fromKey: key) else {
+			return nil
+		}
+
+		let image = try await imageAt(url)
+		let data = image.getPNGData()
+		await PINCache.shared.setObjectAsync(data, forKey: key)
+		return image
+	}
 }
-
-
-
-//public extension Encodable {
-//	public var dictionary: [String: Any]? {
-//		do {
-//			let encoder = JSONEncoder()
-//			let data = try encoder.encode(self)
-//			if let dict = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-//				return dict
-//			}
-//		} catch {
-////			DZError("Error creating the dictionary", error: error)
-//		}
-//		return nil
-//	}
-//}
